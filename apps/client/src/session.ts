@@ -66,6 +66,8 @@ export class Session {
   inCall: string[] = [];
   zone: ZoneDef | null = null;
   ping = 0;
+  /** Consecutive connection attempts that failed; reset on a successful join. */
+  failedAttempts = 0;
 
   readonly media: LocalMedia;
   peers: PeerManager | null = null;
@@ -100,6 +102,7 @@ export class Session {
     this.net.onClose = () => {
       if (this.left) return;
       this.status = "reconnecting";
+      this.failedAttempts++;
       this.peers?.closeAll();
       this.emit();
       setTimeout(() => !this.left && this.net.connect(), 1500);
@@ -148,6 +151,7 @@ export class Session {
         this.peers = new PeerManager(this.selfId, this.media, (to, data) => this.net.send({ t: "signal", to, data }));
         this.peers.onChange = () => this.emit();
         this.status = "connected";
+        this.failedAttempts = 0;
         // Re-announce media state after (re)connecting.
         this.net.send({ t: "media", media: this.me.media });
         if (this.me.status) this.net.send({ t: "status", status: this.me.status });

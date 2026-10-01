@@ -941,3 +941,8 @@ canvas.avatar-preview {
   line-height: 1.8;
   margin: 0 0 18px;
 }
+.status-hint {
+  max-width: 300px;
+  margin: 10px auto 0;
+  line-height: 1.5;
+}

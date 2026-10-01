@@ -156,9 +156,17 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
                 </button>
               </>
             ) : (
-              <p>
-                <span className="spinner" /> {session.status === "reconnecting" ? "Reconnecting…" : "Entering the world…"}
-              </p>
+              <>
+                <p>
+                  <span className="spinner" /> {session.status === "reconnecting" ? "Reconnecting…" : "Entering the world…"}
+                </p>
+                {session.failedAttempts >= 3 && (
+                  <p className="muted tiny status-hint">
+                    Still can't reach the server. Ad-blockers, private DNS or some in-app browsers (WhatsApp, Instagram)
+                    can block it — try opening the link in Chrome or Safari.
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
