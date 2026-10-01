@@ -1,5 +1,7 @@
 # ◆ metaverse
 
+**▶ Live demo: https://metaverse-mzu0.onrender.com** (free hosting, so the first visit after a quiet spell can take ~1 minute to wake up)
+
 A pixel-art copy of a **real neighbourhood** that you and your friends can walk around in. When you walk up to someone, a **video call** starts automatically. Step into a meeting room for a private conversation, or wave at people as you pass. It's in the same spirit as Gather and ZEP, but the map is generated from OpenStreetMap, so it's _your_ streets.
 
 ## Features
