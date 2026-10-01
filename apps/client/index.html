@@ -3,19 +3,93 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <meta name="theme-color" content="#0f1020" />
-    <meta name="description" content="A pixel-art metaverse of my neighbourhood — walk around, bump into people, and talk face to face." />
+    <meta name="theme-color" content="#0d0e1a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="A pixel-art metaverse of a real neighbourhood — walk around, bump into people, and talk face to face." />
     <title>Metaverse — walk, meet, talk</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏙️</text></svg>" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Fonts load without blocking first paint; slow font CDNs must never leave a blank screen. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Silkscreen&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0d0e1a;
+        color: #f1f0f7;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      .boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        text-align: center;
+      }
+      .boot-mark {
+        font-size: 34px;
+        color: #7c5cff;
+        text-shadow: 0 0 18px #7c5cff;
+        animation: boot-pulse 1.4s ease-in-out infinite;
+      }
+      @keyframes boot-pulse {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .boot p {
+        margin: 0;
+        max-width: 340px;
+        color: #a3a1b8;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Replaced by the app on start. Visible only while loading or if the app can't start. -->
+    <div id="root">
+      <div class="boot">
+        <div class="boot-mark">◆</div>
+        <p id="boot-msg">Loading the world…</p>
+      </div>
+    </div>
+    <script>
+      (function () {
+        function msg() {
+          return document.getElementById("boot-msg");
+        }
+        // If the app never mounts (blocked script, very old browser, in-app webview quirk), say why.
+        window.addEventListener("error", function (e) {
+          var m = msg();
+          if (!m) return;
+          m.textContent = "";
+          m.appendChild(document.createTextNode("Couldn't start the world on this browser."));
+          m.appendChild(document.createElement("br"));
+          var detail = document.createElement("small");
+          detail.textContent = String((e && e.message) || "A file failed to load.");
+          m.appendChild(detail);
+          m.appendChild(document.createElement("br"));
+          m.appendChild(document.createElement("br"));
+          m.appendChild(document.createTextNode("Try opening the link in Chrome or Safari, and pause ad-blockers for this site."));
+        });
+        setTimeout(function () {
+          var m = msg();
+          if (m && m.textContent.indexOf("Loading") === 0) m.textContent = "Still loading… on slow mobile data this can take a few seconds.";
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

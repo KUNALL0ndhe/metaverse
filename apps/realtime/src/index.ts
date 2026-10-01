@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
+import { createGzip } from "node:zlib";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { ClientMsg } from "@repo/world";
 import { loadWorld, REPO_ROOT } from "./maps";
@@ -32,6 +33,8 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
   ".webmanifest": "application/manifest+json",
 };
+
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".json", ".svg"]);
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
@@ -65,11 +68,17 @@ const server = createServer((req, res) => {
     return;
   }
   const ext = extname(file);
+  // The whole client is one inlined index.html; gzip it (~270 KB → ~90 KB) for phones on mobile data.
+  const gzip = COMPRESSIBLE.has(ext) && /\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""));
   res.writeHead(200, {
     "Content-Type": MIME[ext] ?? "application/octet-stream",
     "Cache-Control": file.includes(`${normalize("/assets/")}`) ? "public, max-age=31536000, immutable" : "no-cache",
+    Vary: "Accept-Encoding",
+    ...(gzip ? { "Content-Encoding": "gzip" } : {}),
   });
-  createReadStream(file).pipe(res);
+  const stream = createReadStream(file);
+  if (gzip) stream.pipe(createGzip()).pipe(res);
+  else stream.pipe(res);
 });
 
 const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 64 * 1024 });
