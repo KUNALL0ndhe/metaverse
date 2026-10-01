@@ -1,135 +1,108 @@
-# Turborepo starter
+# ◆ metaverse
 
-This Turborepo starter is maintained by the Turborepo core team.
+A pixel-art copy of a **real neighbourhood** that you and your friends can walk around in. When you walk up to someone, a **video call** starts automatically. Step into a meeting room for a private conversation, or wave at people as you pass. It's in the same spirit as Gather and ZEP, but the map is generated from OpenStreetMap, so it's _your_ streets.
 
-## Using this example
+## Features
 
-Run the following command:
+- 🗺️ **Real-world maps.** One command pulls the roads, buildings, parks, water, trees, street lamps and shop names around any address from OpenStreetMap and turns them into a walkable pixel-art map. Your HQ office is placed at the centre.
+- 🎥 **Proximity video and voice.** WebRTC calls connect when players are within a few tiles and drop when they walk away. Voices fade with distance.
+- 🔒 **Private rooms.** Inside a meeting room, only people in that room can hear each other, whatever the distance. Walls block sound.
+- 🖥️ **Screen sharing**, speaking indicators, and click-to-spotlight on any video tile.
+- 🧭 **Click-to-walk** using A* pathfinding. You can also click the minimap to travel, or use "Walk to" on anyone in the People list.
+- 💬 **Chat** to everyone or only to people nearby, with speech bubbles over avatars, emotes (`1`–`6`) and a status line.
+- 🧑‍🎨 **Avatar creator.** Every sprite is drawn in code, with no image assets.
+- 🌙 **Live day/night cycle** that follows your local clock, with street lamps that light up after dark.
+- 🛡️ **Server-checked movement.** The server checks speed and collisions, rate-limits chat, and enforces room caps.
+- 🔗 **Shareable spaces.** `?space=team-standup` gives each group its own instance of the world.
 
-```sh
-npx create-turbo@latest
-```
-
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
+## Architecture
 
 ```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+apps/client      Vite + React UI, canvas renderer, WebRTC mesh
+apps/realtime    Node WebSocket server: rooms, movement validation, chat, WebRTC signalling.
+                 Also serves the built client, so production runs as one process on one port.
+packages/world   Shared map format, wire protocol, avatar model, OSM importer, procedural town
+maps/            Generated maps (maps/default.json is loaded by the server)
+apps/http        REST API + Prisma (accounts/spaces). Not required by the world yet.
 ```
 
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+Each meeting is a WebRTC peer-to-peer mesh. The peer with the lower id always sends the offer, so the two sides never offer at the same time. Mic, camera and screen-share changes use `replaceTrack`, so they never need renegotiation.
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+## Quick start
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+```bash
+pnpm install
+pnpm map:import --place "Your Neighbourhood, Your City"   # optional — otherwise you get a procedural town
+pnpm dev                                                   # client on :5173, realtime server on :8080
 ```
 
-### Develop
+Open http://localhost:5173 in two browser windows and walk them towards each other.
 
-To develop all apps and packages, run the following command:
+### Map import options
 
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```bash
+pnpm map:import --place "Koregaon Park, Pune"
+pnpm map:import --lat 18.5362 --lng 73.8940 --radius 350 --name "My Hood" --hq "Our HQ"
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+| flag       | default | meaning                                        |
+| ---------- | ------- | ---------------------------------------------- |
+| `--radius` | `300`   | half-width of the imported square, in metres   |
+| `--mpt`    | `2.5`   | metres per tile (smaller = bigger, more detailed world) |
+| `--name`   | place   | map name shown in the lobby                    |
+| `--hq`     | `Metaverse HQ` | name of the office at the centre        |
+| `--out`    | `default.json` | file written in `maps/`                 |
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+Restart the server after importing. `pnpm map:generate` brings back the procedural town.
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+## Putting it on the internet
 
-### Remote Caching
+### Option A — instant link from your PC (no account)
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
+```bash
+pnpm share
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+This builds the app, starts it and opens a free [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/). You get a link like `https://some-words.trycloudflare.com` with HTTPS, so camera and mic work. It stays up while that terminal is open. The URL changes every time you restart, and it goes down when your PC sleeps.
+You need `cloudflared` installed (`winget install Cloudflare.cloudflared`, or `brew install cloudflared` on macOS).
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+### Option B — permanent free URL on Render
 
+1. Push this repo to GitHub, including `maps/default.json` so your area ships with the deploy:
+   ```bash
+   git add -A && git commit -m "Metaverse: real-world map, proximity video, multiplayer"
+   git remote add origin https://github.com/<you>/metaverse.git
+   git push -u origin main
+   ```
+2. On [render.com](https://render.com), sign in with GitHub, then go to **New → Blueprint** and pick the repo. `render.yaml` configures everything (Docker, free plan, health check).
+3. Wait for the build (about 3–5 minutes). Your world is then live at `https://metaverse-xxxx.onrender.com`, and every `git push` redeploys it.
+
+Free Render instances sleep after 15 minutes without visitors, and the first visit afterwards takes about a minute to wake.
+
+### Anywhere else
+
+Production is a single Node process (or a Docker image), so it runs on any host with WebSocket support (Railway, Fly.io, Koyeb, a VPS…):
+
+```bash
+pnpm build && pnpm start          # serves everything on $PORT (default 8080)
+docker build -t metaverse . && docker run -p 8080:8080 metaverse
 ```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
+> **Camera and mic need HTTPS** on any origin other than `localhost`. Hosting platforms provide it automatically.
+>
+> **TURN for strict networks.** Calls use public Google STUN, which works for most home and office networks. Users behind symmetric NAT or corporate firewalls need a TURN server (for example Twilio, Metered or coturn). Pass it at build time:
+> `VITE_ICE_SERVERS='[{"urls":"turn:turn.example.com:3478","username":"u","credential":"p"}]' pnpm build`
 
-## Useful Links
+## Controls
 
-Learn more about the power of Turborepo:
+| key                    | action                       |
+| ---------------------- | ---------------------------- |
+| `WASD` / arrows        | walk                         |
+| click / tap            | auto-walk there              |
+| `Enter`                | chat                         |
+| `1`–`6`                | emotes                       |
+| `M` / `N`              | minimap / day-night          |
+| scroll, `+` / `-`      | zoom                         |
+| `?`                    | help                         |
 
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributors (ODbL).

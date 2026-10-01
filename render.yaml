@@ -1,0 +1,10 @@
+# One-click deploy on Render (free tier supports WebSockets + HTTPS).
+# Render dashboard → New → Blueprint → pick this repo.
+services:
+  - type: web
+    name: metaverse
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true

@@ -36,3 +36,9 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Scratch maps from importer tests
+maps/_*.json
+
+# TypeScript incremental build info
+*.tsbuildinfo
