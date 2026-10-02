@@ -30,6 +30,9 @@ const PARTS: { key: keyof AvatarConfig; label: string; options: readonly string[
   { key: "pants", label: "Bottom", options: PANTS_COLORS, swatch: true },
 ];
 
+// On phones, autofocus would pop the keyboard and scroll the spot picker out of view.
+const TOUCH = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+
 interface SpacesInfo {
   spots: SpotInfo[];
   spaces: { id: string; online: number; spot: string }[];
@@ -97,6 +100,11 @@ export function Lobby({ initial, media, onJoin }: { initial: Profile; media: Loc
   const spaceId = normalise(space) || chosen?.id || "lobby";
   const online = info?.spaces.find((s) => s.id === spaceId)?.online ?? 0;
   const totalOnline = info?.spaces.reduce((n, s) => n + s.online, 0) ?? 0;
+
+  // Keep the chosen card visible in the swipeable row on phones.
+  useEffect(() => {
+    document.querySelector(".spot.selected")?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [chosen?.id]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,7 +189,7 @@ export function Lobby({ initial, media, onJoin }: { initial: Profile; media: Loc
           <section className="panel join">
             <label className="field">
               <span>Your name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="e.g. Alex" autoFocus />
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="e.g. Alex" autoFocus={!TOUCH} />
             </label>
             <label className="field">
               <span>
