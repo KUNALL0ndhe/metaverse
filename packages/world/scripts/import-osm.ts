@@ -4,9 +4,9 @@
  *   pnpm map:import --place "Koregaon Park, Pune"
  *   pnpm map:import --lat 18.5362 --lng 73.8940 --radius 350 --name "My Hood"
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { mapFromOsm, overpassQuery, type OsmElement } from "../src/index";
 
 const UA = "metaverse-side-project/1.0 (OSM map importer)";
@@ -56,6 +56,49 @@ async function fetchOsm(query: string): Promise<OsmElement[]> {
   throw lastErr;
 }
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const MAPS_DIR = resolve(HERE, "../../../maps");
+const CACHE_DIR = resolve(HERE, "../.osm-cache");
+
+export interface ImportOptions {
+  lat: number;
+  lng: number;
+  radius: number;
+  metersPerTile: number;
+  name: string;
+  /** File name in maps/ (also the spot id), e.g. "gateway-of-india.json". */
+  out: string;
+  hqName?: string;
+  landmark?: string;
+  blurb?: string;
+  order?: number;
+  spawnAt?: { lat: number; lng: number };
+  /** Re-download from Overpass even if a cached response exists. */
+  refresh?: boolean;
+}
+
+/** Fetch (or reuse cached) OSM data for an area and write the playable map to maps/. */
+export async function importArea(o: ImportOptions) {
+  const cacheFile = resolve(CACHE_DIR, `${o.lat.toFixed(5)}_${o.lng.toFixed(5)}_${o.radius}.json`);
+  let elements: OsmElement[];
+  if (!o.refresh && existsSync(cacheFile)) {
+    elements = JSON.parse(readFileSync(cacheFile, "utf8"));
+    console.log(`📦 ${o.name}: using cached OSM data (${elements.length} elements)`);
+  } else {
+    console.log(`🛰️  ${o.name}: fetching OpenStreetMap data around ${o.lat.toFixed(5)}, ${o.lng.toFixed(5)} (±${o.radius} m)…`);
+    elements = await fetchOsm(overpassQuery(o.lat, o.lng, o.radius));
+    mkdirSync(CACHE_DIR, { recursive: true });
+    writeFileSync(cacheFile, JSON.stringify(elements));
+  }
+
+  const map = mapFromOsm(elements, { ...o });
+  const out = resolve(MAPS_DIR, o.out);
+  mkdirSync(dirname(out), { recursive: true });
+  writeFileSync(out, JSON.stringify(map));
+  console.log(`✅ ${o.name}: ${map.width}×${map.height} tiles, ${map.objects.length} objects, ${map.labels.length} labels → maps/${o.out}`);
+  return map;
+}
+
 async function main() {
   const place = arg("place");
   let lat = Number(arg("lat"));
@@ -63,28 +106,32 @@ async function main() {
   if (place) ({ lat, lng } = await geocode(place));
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     console.error('Usage: pnpm map:import --place "Your Neighbourhood, City"  |  --lat <lat> --lng <lng>');
-    console.error("Options: --radius <m, default 300>  --mpt <metres per tile, default 2.5>  --name <map name>  --hq <HQ name>");
+    console.error(
+      "Options: --radius <m, default 300>  --mpt <metres per tile, default 2.5>  --name <map name>  --out <file.json>\n" +
+        '         --hq <HQ name>  --landmark <label at spawn>  --blurb "<lobby description>"  --order <n>  --refresh',
+    );
     process.exit(1);
   }
-  const radius = Number(arg("radius") ?? 300);
-  const metersPerTile = Number(arg("mpt") ?? 2.5);
-  const name = arg("name") ?? place?.split(",")[0] ?? "My Area";
-  const out = resolve(dirname(fileURLToPath(import.meta.url)), "../../../maps", arg("out") ?? "default.json");
-
-  console.log(`🛰️  Fetching OpenStreetMap data around ${lat.toFixed(5)}, ${lng.toFixed(5)} (±${radius} m)…`);
-  const elements = await fetchOsm(overpassQuery(lat, lng, radius));
-  console.log(`🧱 ${elements.length} OSM elements — rasterising at ${metersPerTile} m/tile…`);
-
-  const map = mapFromOsm(elements, { lat, lng, radius, metersPerTile, name, hqName: arg("hq") });
-  mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, JSON.stringify(map));
-  console.log(
-    `✅ ${map.width}×${map.height} tiles, ${map.objects.length} objects, ${map.labels.length} labels → ${out}`,
-  );
+  await importArea({
+    lat,
+    lng,
+    radius: Number(arg("radius") ?? 300),
+    metersPerTile: Number(arg("mpt") ?? 2.5),
+    name: arg("name") ?? place?.split(",")[0] ?? "My Area",
+    out: arg("out") ?? "default.json",
+    hqName: arg("hq"),
+    landmark: arg("landmark"),
+    blurb: arg("blurb"),
+    order: arg("order") !== undefined ? Number(arg("order")) : undefined,
+    refresh: process.argv.includes("--refresh"),
+  });
   console.log("   Restart the realtime server to load it.");
 }
 
-main().catch((e) => {
-  console.error("❌", e instanceof Error ? e.message : e);
-  process.exit(1);
-});
+// Run as a CLI only when executed directly (not when imported by import-spots.ts).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error("❌", e instanceof Error ? e.message : e);
+    process.exit(1);
+  });
+}

@@ -946,3 +946,88 @@ canvas.avatar-preview {
   margin: 10px auto 0;
   line-height: 1.5;
 }
+.bot-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #7ee0e8;
+  background: rgba(20, 110, 120, 0.35);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
+
+/* ------------------------------------------------------------- Spot picker */
+
+.spots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.spot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 8px 8px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  backdrop-filter: blur(14px);
+  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.spot:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.spot.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(124, 92, 255, 0.45), 0 12px 30px rgba(124, 92, 255, 0.25);
+}
+.spot-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  image-rendering: pixelated;
+  margin-bottom: 4px;
+}
+.spot-name {
+  font-weight: 700;
+  font-size: 15px;
+  padding: 0 4px;
+}
+.spot-blurb {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+  padding: 0 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.spot-online {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(13, 14, 26, 0.8);
+  padding: 3px 8px;
+  border-radius: 99px;
+}
+@media (max-width: 760px) {
+  .spots {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 0 -16px 18px;
+    padding: 0 16px 4px;
+  }
+  .spot {
+    flex: 0 0 160px;
+    scroll-snap-align: start;
+  }
+}

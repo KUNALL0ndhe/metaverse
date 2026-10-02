@@ -42,3 +42,6 @@ maps/_*.json
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Raw OpenStreetMap responses cached by the map importer
+packages/world/.osm-cache

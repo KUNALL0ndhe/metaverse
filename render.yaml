@@ -8,3 +8,8 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      # Ping our own public URL every 10 min so free instances don't sleep (no cold-start wait).
+      # Running 24/7 uses ~744 of the 750 free instance-hours per month; remove if you add more free services.
+      - key: KEEP_AWAKE
+        value: "1"

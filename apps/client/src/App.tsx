@@ -7,18 +7,24 @@ import { WorldView } from "./ui/WorldView";
 
 const STORE_KEY = "metaverse.profile";
 
+/** Invite links carry ?spot=…&space=…; otherwise remember the visitor's last choice. */
 function loadProfile(): Profile {
-  const urlSpace = normalise(new URLSearchParams(location.search).get("space") ?? "");
+  const params = new URLSearchParams(location.search);
+  const urlSpot = normalise(params.get("spot") ?? "");
+  const urlSpace = normalise(params.get("space") ?? "");
+  let saved: Partial<Profile> = {};
   try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as Profile;
-      return { name: p.name ?? "", avatar: sanitizeAvatar(p.avatar), space: urlSpace || p.space || "lobby" };
-    }
+    saved = JSON.parse(localStorage.getItem(STORE_KEY) ?? "{}") as Partial<Profile>;
   } catch {
     /* storage unavailable */
   }
-  return { name: "", avatar: randomAvatar(), space: urlSpace || "lobby" };
+  const fromLink = !!(urlSpot || urlSpace);
+  return {
+    name: saved.name ?? "",
+    avatar: saved.avatar ? sanitizeAvatar(saved.avatar) : randomAvatar(),
+    spot: urlSpot || (fromLink ? "" : (saved.spot ?? "")),
+    space: fromLink ? urlSpace : (saved.space ?? ""),
+  };
 }
 
 export function App() {
@@ -35,9 +41,10 @@ export function App() {
       /* ignore */
     }
     const url = new URL(location.href);
+    url.searchParams.set("spot", p.spot);
     url.searchParams.set("space", p.space);
     history.replaceState(null, "", url);
-    setSession(new Session(p.name, p.avatar, p.space, media));
+    setSession(new Session(p.name, p.avatar, p.space, p.spot, media));
   };
 
   const leave = () => {

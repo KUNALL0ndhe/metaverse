@@ -35,6 +35,10 @@ export interface MapData {
   objects: MapObject[];
   labels: MapLabel[];
   spawn: { x: number; y: number };
+  /** One-line description shown in the lobby's spot picker. */
+  blurb?: string;
+  /** Sort order in the spot picker (lower first). */
+  order?: number;
   source: {
     type: "osm" | "procedural";
     lat?: number;

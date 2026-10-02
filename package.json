@@ -10,7 +10,8 @@
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types",
-    "share": "pnpm build && node scripts/share.mjs"
+    "share": "pnpm build && node scripts/share.mjs",
+    "map:spots": "pnpm --filter @repo/world map:spots"
   },
   "devDependencies": {
     "prettier": "^3.7.4",

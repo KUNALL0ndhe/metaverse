@@ -9,10 +9,12 @@ import {
   type Dir,
   type PlayerInfo,
   type ServerMsg,
-  type World,
 } from "@repo/world";
+import { Bots } from "./bots";
+import type { Spot } from "./maps";
 
 const NEARBY_CHAT_RADIUS = 10;
+const BOTS_PER_ROOM = 4;
 const DIRS = new Set<Dir>(["down", "up", "left", "right"]);
 
 interface Conn {
@@ -26,17 +28,32 @@ interface Conn {
 
 export class Room {
   readonly players = new Map<string, Conn>();
+  readonly world;
+  private bots;
   private timer: NodeJS.Timeout;
+  private botTimer: NodeJS.Timeout;
 
   constructor(
     readonly id: string,
-    readonly world: World,
+    readonly spot: Spot,
     private onEmpty: (room: Room) => void,
   ) {
-    // Broadcast batched position updates at 20 Hz.
+    this.world = spot.world;
+    this.bots = new Bots(this.world, BOTS_PER_ROOM);
+    // Broadcast batched position updates at 20 Hz; bots think at 10 Hz.
     this.timer = setInterval(() => this.flush(), 50);
+    let last = Date.now();
+    this.botTimer = setInterval(() => {
+      const now = Date.now();
+      this.bots.tick(now, (now - last) / 1000, [...this.players.values()].map((c) => c.info), this.world.data.name, {
+        say: (from, text) => this.broadcast({ t: "say", from, text }),
+        emote: (from, emoji) => this.broadcast({ t: "emote", from, emoji }),
+      });
+      last = now;
+    }, 100);
   }
 
+  /** Number of humans in the room (bots excluded). */
   get size() {
     return this.players.size;
   }
@@ -65,8 +82,9 @@ export class Room {
       t: "welcome",
       selfId: id,
       space: this.id,
+      spot: this.spot.id,
       map: this.world.data,
-      players: [...[...this.players.values()].map((c) => c.info), info],
+      players: [...this.bots.list.map((b) => b.info), ...[...this.players.values()].map((c) => c.info), info],
     });
     this.broadcast({ t: "joined", player: info });
     this.players.set(id, conn);
@@ -77,9 +95,15 @@ export class Room {
     if (!this.players.delete(id)) return;
     this.broadcast({ t: "left", id });
     if (this.players.size === 0) {
-      clearInterval(this.timer);
+      this.dispose();
       this.onEmpty(this);
     }
+  }
+
+  /** Stop this room's timers (position broadcasts and bots). */
+  dispose() {
+    clearInterval(this.timer);
+    clearInterval(this.botTimer);
   }
 
   handle(id: string, msg: ClientMsg) {
@@ -165,6 +189,12 @@ export class Room {
       if (!c.dirty) continue;
       c.dirty = false;
       const i = c.info;
+      p.push([i.id, round2(i.x), round2(i.y), i.dir, i.moving ? 1 : 0]);
+    }
+    for (const b of this.bots.list) {
+      if (!b.dirty) continue;
+      b.dirty = false;
+      const i = b.info;
       p.push([i.id, round2(i.x), round2(i.y), i.dir, i.moving ? 1 : 0]);
     }
     if (p.length) this.broadcast({ t: "state", p });

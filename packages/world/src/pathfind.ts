@@ -1,4 +1,4 @@
-import type { World } from "@repo/world";
+import type { World } from "./map";
 
 /** 8-directional A* over the world's solid grid (no corner cutting). Returns tile-centre waypoints. */
 export function findPath(world: World, sx: number, sy: number, gx: number, gy: number, maxNodes = 60000) {

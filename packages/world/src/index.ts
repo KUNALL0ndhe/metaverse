@@ -5,3 +5,4 @@ export * from "./protocol";
 export * from "./builder";
 export * from "./procedural";
 export * from "./osm";
+export * from "./pathfind";

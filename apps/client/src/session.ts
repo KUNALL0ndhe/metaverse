@@ -22,6 +22,7 @@ export interface Avatarish {
   moving: boolean;
   media: MediaState;
   status: string;
+  bot?: boolean;
   bubble?: { text: string; until: number };
   emote?: { emoji: string; start: number };
 }
@@ -56,6 +57,8 @@ export class Session {
   error = "";
   selfId = "";
   space: string;
+  /** Map (demo spot) id this space uses. */
+  spot: string;
   world: World | null = null;
   me: Avatarish;
   players = new Map<string, RemotePlayer>();
@@ -78,7 +81,8 @@ export class Session {
   private left = false;
   private pingTimer = 0;
 
-  constructor(name: string, avatar: AvatarConfig, space: string, media = new LocalMedia()) {
+  constructor(name: string, avatar: AvatarConfig, space: string, spot: string, media = new LocalMedia()) {
+    this.spot = spot;
     this.media = media;
     this.space = space;
     this.me = {
@@ -98,7 +102,7 @@ export class Session {
       this.emit();
     };
     this.net.on((m) => this.onMessage(m));
-    this.net.onOpen = () => this.net.send({ t: "join", space, name, avatar });
+    this.net.onOpen = () => this.net.send({ t: "join", space, spot, name, avatar });
     this.net.onClose = () => {
       if (this.left) return;
       this.status = "reconnecting";
@@ -135,6 +139,8 @@ export class Session {
     switch (m.t) {
       case "welcome": {
         this.selfId = m.selfId;
+        this.space = m.space;
+        this.spot = m.spot;
         this.me.id = m.selfId;
         this.world = new World(m.map);
         const self = m.players.find((p) => p.id === m.selfId);
@@ -199,6 +205,11 @@ export class Session {
         this.emit();
         return;
       }
+      case "say": {
+        const who = this.players.get(m.from);
+        if (who) who.bubble = { text: m.text, until: performance.now() + 4500 + m.text.length * 40 };
+        return;
+      }
       case "emote": {
         const who = m.from === this.selfId ? this.me : this.players.get(m.from);
         if (who) who.emote = { emoji: m.emoji, start: performance.now() };
@@ -258,6 +269,7 @@ export class Session {
     if (!peers) return;
     const wanted = new Set<string>();
     for (const p of this.players.values()) {
+      if (p.bot) continue; // bots are never part of calls
       const d = Math.hypot(p.tx - this.me.x, p.ty - this.me.y);
       const pz = w.zoneAt(p.tx, p.ty);
       let ok: boolean;
@@ -285,6 +297,13 @@ export class Session {
 
   emote(emoji: string) {
     this.net.send({ t: "emote", emoji });
+  }
+
+  /** Real people in this space, including you. */
+  get humans() {
+    let n = 1;
+    for (const p of this.players.values()) if (!p.bot) n++;
+    return n;
   }
 
   setStatus(status: string) {

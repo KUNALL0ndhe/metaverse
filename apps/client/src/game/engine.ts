@@ -1,6 +1,6 @@
 import { MOVE_SPEED, type Dir, type MapObject, type World } from "@repo/world";
 import type { Avatarish, Session } from "../session";
-import { findPath } from "./pathfind";
+import { findPath } from "@repo/world";
 import { AV_H, AV_W, FLAT_OBJECTS, MINIMAP_COLORS, TS, drawAvatar, makeCanvas, objectSprite, paintTile } from "./sprites";
 
 const CHUNK = 16;
@@ -502,10 +502,10 @@ export class Engine {
     ctx.font = "600 12px Outfit, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const micIcon = a.media.mic ? "" : "🔇 ";
-    const label = `${micIcon}${a.name}${a.status ? " · " + a.status : ""}`;
+    const micIcon = a.bot ? "🤖 " : a.media.mic ? "" : "🔇 ";
+    const label = `${micIcon}${a.name}${a.bot ? " · bot" : ""}${a.status ? " · " + a.status : ""}`;
     const tw = ctx.measureText(label).width + 14;
-    ctx.fillStyle = self ? "rgba(124,92,255,0.92)" : "rgba(18,18,30,0.72)";
+    ctx.fillStyle = self ? "rgba(124,92,255,0.92)" : a.bot ? "rgba(20,110,120,0.85)" : "rgba(18,18,30,0.72)";
     roundRect(ctx, sx - tw / 2, headY - 22, tw, 19, 9.5);
     ctx.fill();
     ctx.fillStyle = "#fff";

@@ -19,6 +19,8 @@ export interface PlayerInfo {
   moving: boolean;
   media: MediaState;
   status: string;
+  /** Server-run guide avatars; never part of calls and always labelled as bots. */
+  bot?: boolean;
 }
 
 /** Proximity calls connect within this radius (tiles) and drop beyond the hangup radius. */
@@ -28,7 +30,7 @@ export const MOVE_SPEED = 5.2; // tiles per second
 export const MAX_ROOM_SIZE = 60;
 
 export type ClientMsg =
-  | { t: "join"; space: string; name: string; avatar: AvatarConfig }
+  | { t: "join"; space: string; spot?: string; name: string; avatar: AvatarConfig }
   | { t: "move"; x: number; y: number; dir: Dir; moving: boolean }
   | { t: "chat"; text: string; scope: "global" | "nearby" }
   | { t: "emote"; emoji: string }
@@ -38,13 +40,15 @@ export type ClientMsg =
   | { t: "ping"; ts: number };
 
 export type ServerMsg =
-  | { t: "welcome"; selfId: string; space: string; map: MapData; players: PlayerInfo[] }
+  | { t: "welcome"; selfId: string; space: string; spot: string; map: MapData; players: PlayerInfo[] }
   | { t: "joined"; player: PlayerInfo }
   | { t: "left"; id: string }
   | { t: "state"; p: [id: string, x: number, y: number, dir: Dir, moving: 0 | 1][] }
   | { t: "correct"; x: number; y: number }
   | { t: "chat"; from: string; name: string; text: string; scope: "global" | "nearby"; ts: number }
   | { t: "emote"; from: string; emoji: string }
+  /** A speech bubble only (not added to the chat log), used by bots. */
+  | { t: "say"; from: string; text: string }
   | { t: "media"; from: string; media: MediaState }
   | { t: "status"; from: string; status: string }
   | { t: "signal"; from: string; data: unknown }
@@ -52,3 +56,16 @@ export type ServerMsg =
   | { t: "error"; message: string };
 
 export const EMOTES = ["👋", "❤️", "😂", "🎉", "👍", "🔥"];
+
+/** A demo spot (one map) as listed in the lobby. */
+export interface SpotInfo {
+  id: string;
+  name: string;
+  blurb?: string;
+  /** Downsampled ground tiles (base64, pw×ph bytes) for a lobby thumbnail. */
+  preview: string;
+  pw: number;
+  ph: number;
+  online: number;
+  source: "osm" | "procedural";
+}

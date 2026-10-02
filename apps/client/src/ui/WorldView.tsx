@@ -94,7 +94,7 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
   };
 
   const invite = async () => {
-    const url = `${location.origin}/?space=${encodeURIComponent(session.space)}`;
+    const url = `${location.origin}/?spot=${encodeURIComponent(session.spot)}&space=${encodeURIComponent(session.space)}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -112,7 +112,8 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
     return p && peer ? { id, p, peer } : null;
   });
   const showStrip = session.inCall.length > 0 || media.camOn || !!media.screen;
-  const players = [...session.players.values()].sort((a, b) => a.name.localeCompare(b.name));
+  // Real people first, then the guide bots.
+  const players = [...session.players.values()].sort((a, b) => Number(!!a.bot) - Number(!!b.bot) || a.name.localeCompare(b.name));
   const spot = spotlight === "self" ? null : spotlight ? session.players.get(spotlight) : null;
   const spotPeer = spotlight && spotlight !== "self" ? peers?.get(spotlight) : null;
   const world = session.world;
@@ -130,7 +131,7 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
           <span>/{session.space}</span>
           <span className="dot-sep">·</span>
           <span>
-            <span className="live-dot" /> {session.players.size + 1} online
+            <span className="live-dot" /> {session.humans} online
           </span>
           {session.status === "connected" && (
             <>
@@ -273,7 +274,7 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
               💬 Chat
             </button>
             <button className={panel === "people" ? "active" : ""} onClick={() => setPanel("people")}>
-              👥 People <span className="count">{session.players.size + 1}</span>
+              👥 People <span className="count">{session.humans}</span>
             </button>
             <button className="close" onClick={() => setPanel(null)} aria-label="Close panel">
               ×
@@ -328,7 +329,7 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
                   </select>
                 </div>
               </div>
-              {players.length === 0 && (
+              {session.humans === 1 && (
                 <p className="muted empty">
                   It's just you for now. <button className="linkish" onClick={invite}>Copy an invite link</button> and bring
                   friends.
@@ -341,10 +342,13 @@ export function WorldView({ session, onLeave }: { session: Session; onLeave: () 
                     <strong>
                       {session.inCall.includes(p.id) && <span className="incall" title="In a call with you" />}
                       {p.name}
+                      {p.bot && <span className="bot-tag">bot</span>}
                     </strong>
                     <span className="muted tiny">
-                      {p.status || (world?.zoneAt(p.tx, p.ty) ? world.zoneDef(world.zoneAt(p.tx, p.ty))?.name : "Roaming")}
-                      {p.media.mic ? "" : " · muted"}
+                      {p.bot
+                        ? "Guide · says hi when you walk up"
+                        : (p.status || (world?.zoneAt(p.tx, p.ty) ? world.zoneDef(world.zoneAt(p.tx, p.ty))?.name : "Roaming")) +
+                          (p.media.mic ? "" : " · muted")}
                     </span>
                   </div>
                   <button className="btn ghost small" onClick={() => engineRef.current?.walkToPlayer(p.id)}>

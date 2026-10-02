@@ -3,23 +3,46 @@ import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { createGzip } from "node:zlib";
 import { WebSocketServer, type WebSocket } from "ws";
-import type { ClientMsg } from "@repo/world";
-import { loadWorld, REPO_ROOT } from "./maps";
+import type { ClientMsg, SpotInfo } from "@repo/world";
+import { loadSpots, REPO_ROOT, type Spot } from "./maps";
 import { Room, send } from "./room";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const CLIENT_DIST = resolve(process.env.CLIENT_DIST ?? join(REPO_ROOT, "apps/client/dist"));
 
-const world = loadWorld();
+const spots = loadSpots();
+const spotById = new Map(spots.map((s) => [s.id, s]));
 const rooms = new Map<string, Room>();
 
-function getRoom(id: string) {
+/** A space is bound to the spot chosen by whoever opened it; later joiners share that map. */
+function getRoom(id: string, spot: Spot) {
   let room = rooms.get(id);
   if (!room) {
-    room = new Room(id, world, (r) => rooms.delete(r.id));
+    room = new Room(id, spot, (r) => rooms.delete(r.id));
     rooms.set(id, room);
   }
   return room;
+}
+
+function spotList(): SpotInfo[] {
+  return spots.map((s) => ({
+    id: s.id,
+    name: s.world.data.name,
+    blurb: s.world.data.blurb,
+    preview: s.preview.data,
+    pw: s.preview.w,
+    ph: s.preview.h,
+    online: [...rooms.values()].filter((r) => r.spot === s).reduce((n, r) => n + r.size, 0),
+    source: s.world.data.source.type,
+  }));
+}
+
+// Free hosting (e.g. Render) sleeps after ~15 idle minutes; KEEP_AWAKE=1 pings our public URL so
+// the first visitor never waits for a cold start. Render provides RENDER_EXTERNAL_URL automatically.
+const KEEP_AWAKE_URL = process.env.KEEP_AWAKE === "1" ? (process.env.PUBLIC_URL ?? process.env.RENDER_EXTERNAL_URL) : undefined;
+if (KEEP_AWAKE_URL) {
+  setInterval(() => fetch(`${KEEP_AWAKE_URL}/health`).catch(() => {}), 10 * 60 * 1000);
+  console.log(`⏰ Keep-awake: pinging ${KEEP_AWAKE_URL}/health every 10 minutes`);
 }
 
 const MIME: Record<string, string> = {
@@ -41,15 +64,15 @@ const server = createServer((req, res) => {
 
   if (url.pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size }));
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, spots: spots.length }));
     return;
   }
   if (url.pathname === "/api/spaces") {
     res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
     res.end(
       JSON.stringify({
-        map: { name: world.data.name, source: world.data.source },
-        spaces: [...rooms.values()].map((r) => ({ id: r.id, online: r.size })),
+        spots: spotList(),
+        spaces: [...rooms.values()].map((r) => ({ id: r.id, online: r.size, spot: r.spot.id })),
       }),
     );
     return;
@@ -106,10 +129,14 @@ wss.on("connection", (ws) => {
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, "")
         .slice(0, 32);
-      room = getRoom(space || "lobby");
+      const spot = spotById.get(String(msg.spot ?? "")) ?? spots[0]!;
+      room = getRoom(space || spot.id, spot);
       playerId = room.join(ws, msg);
       if (!playerId) {
-        if (room.size === 0) rooms.delete(room.id);
+        if (room.size === 0) {
+          room.dispose();
+          rooms.delete(room.id);
+        }
         room = null;
       }
       return;

@@ -11,7 +11,8 @@
   "scripts": {
     "map:import": "tsx scripts/import-osm.ts",
     "map:generate": "tsx scripts/generate.ts",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "map:spots": "tsx scripts/import-spots.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

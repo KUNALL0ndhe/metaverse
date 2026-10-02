@@ -25,6 +25,14 @@ export interface OsmOptions {
   metersPerTile: number;
   name: string;
   hqName?: string;
+  /** Name shown at the spawn point (the spot's landmark). */
+  landmark?: string;
+  /** One-line description for the lobby's spot picker. */
+  blurb?: string;
+  /** Sort order in the spot picker. */
+  order?: number;
+  /** Where players spawn and the landmark label sits (defaults to the area centre). */
+  spawnAt?: { lat: number; lng: number };
 }
 
 export function overpassQuery(lat: number, lng: number, radius: number) {
@@ -52,7 +60,7 @@ function areaKind(tags: Record<string, string>): AreaKind | null {
   const { landuse, leisure, natural, amenity, place, highway, waterway, water, area } = tags;
   if (natural === "water" || water || waterway === "riverbank" || landuse === "reservoir" || landuse === "basin")
     return "water";
-  if (landuse === "forest" || natural === "wood" || natural === "scrub") return "forest";
+  if (landuse === "forest" || natural === "wood" || natural === "scrub" || natural === "wetland") return "forest";
   if (landuse === "farmland" || landuse === "orchard" || landuse === "vineyard" || landuse === "allotments")
     return "field";
   if (natural === "sand" || natural === "beach") return "sand";
@@ -205,6 +213,7 @@ export function mapFromOsm(elements: OsmElement[], opts: OsmOptions): MapData {
   const roads: { line: Pt[]; w: number; tile: number; name?: string }[] = [];
   const waterways: { line: Pt[]; w: number }[] = [];
   const rails: Pt[][] = [];
+  const coasts: Pt[][] = [];
   const pois: MapLabel[] = [];
 
   const ringsOf = (el: OsmElement): Pt[][] => {
@@ -233,6 +242,20 @@ export function mapFromOsm(elements: OsmElement[], opts: OsmOptions): MapData {
       if (tags.name && POI_KEYS.some((k) => tags[k]) && !BORING_AMENITIES.has(tags.amenity ?? "")) {
         pois.push({ text: tags.name, x, y, kind: "poi" });
       }
+      continue;
+    }
+
+    if (tags.natural === "coastline" && el.type === "way") {
+      coasts.push(line(el.geometry));
+      continue;
+    }
+
+    // Piers, jetties and breakwaters: walkable paths out over the water.
+    if ((tags.man_made === "pier" || tags.man_made === "breakwater" || tags.man_made === "groyne") && el.type === "way") {
+      const l = line(el.geometry);
+      const closed = l.length >= 4 && l[0]![0] === l[l.length - 1]![0] && l[0]![1] === l[l.length - 1]![1];
+      if (closed && tags.man_made === "pier") areas.push({ poly: l, kind: "plaza", area: polygonArea(l) });
+      else if (l.length >= 2) roads.push({ line: l, w: Math.max(1, 4 / mpt), tile: Tile.Plaza });
       continue;
     }
 
@@ -275,6 +298,9 @@ export function mapFromOsm(elements: OsmElement[], opts: OsmOptions): MapData {
       }
     }
   }
+
+  // 0. The sea. OSM has no sea polygons — only coastline ways with land on their left.
+  fillSea(b, coasts);
 
   // 1. Land use, largest first so smaller features paint over bigger ones.
   areas.sort((a, c) => c.area - a.area);
@@ -346,13 +372,166 @@ export function mapFromOsm(elements: OsmElement[], opts: OsmOptions): MapData {
   }
   b.labels.push(...kept);
 
-  // 7. Your HQ right at the centre of your area.
-  b.stampHQ(W / 2, H / 2, opts.hqName);
+  // 7. The HQ office (with private meeting rooms) goes on the clearest ground near the centre,
+  //    so the landmark you imported stays intact; players spawn at the landmark itself.
+  const [sx, sy] = opts.spawnAt ? project({ lat: opts.spawnAt.lat, lon: opts.spawnAt.lng }) : [W / 2, H / 2];
+  const hq = findHQSpot(b, sx, sy);
+  b.stampHQ(hq.x, hq.y, opts.hqName);
+  b.spawn = { x: sx, y: sy };
+  if (opts.landmark) {
+    b.labels = b.labels.filter((l) => l.text !== opts.landmark);
+    b.labels.push({ text: opts.landmark, x: sx, y: sy - 4, kind: "place" });
+  }
 
-  return b.build(opts.name, mpt, {
+  const map = b.build(opts.name, mpt, {
     type: "osm",
     lat: opts.lat,
     lng: opts.lng,
     attribution: "Map data © OpenStreetMap contributors (ODbL)",
   });
+  if (opts.blurb) map.blurb = opts.blurb;
+  if (opts.order !== undefined) map.order = opts.order;
+  return map;
+}
+
+/**
+ * Pick the HQ centre that bulldozes the least: few buildings, water or rail under its footprint,
+ * close to the map centre. Uses a summed-area table so every candidate costs O(1).
+ */
+function findHQSpot(b: MapBuilder, sx: number, sy: number) {
+  const W = b.width;
+  const H = b.height;
+  const FW = 44; // HQ (36×24) plus its plaza
+  const FH = 32;
+  // Avoid flattening buildings, water and rail — and the parks, gardens and beaches landmarks sit in.
+  const weight = (t: number) =>
+    t === Tile.Water
+      ? 6
+      : t === Tile.Building || t === Tile.Rail
+        ? 4
+        : t === Tile.Park || t === Tile.Forest || t === Tile.Sand
+          ? 2.5
+          : t === Tile.RoadMajor
+            ? 1.5
+            : t === Tile.Road
+              ? 0.6
+              : 0;
+  const sat = new Float64Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++)
+    for (let x = 0; x < W; x++)
+      sat[(y + 1) * (W + 1) + x + 1] =
+        weight(b.get(x, y)) + sat[y * (W + 1) + x + 1]! + sat[(y + 1) * (W + 1) + x]! - sat[y * (W + 1) + x]!;
+  const area = (x0: number, y0: number) =>
+    sat[(y0 + FH) * (W + 1) + x0 + FW]! - sat[y0 * (W + 1) + x0 + FW]! - sat[(y0 + FH) * (W + 1) + x0]! + sat[y0 * (W + 1) + x0]!;
+
+  let best = { x: W / 2, y: H / 2, cost: Infinity };
+  for (let y0 = 2; y0 + FH < H - 2; y0 += 2)
+    for (let x0 = 2; x0 + FW < W - 2; x0 += 2) {
+      const cx = x0 + FW / 2;
+      const cy = y0 + FH / 2;
+      // Keep the landmark (spawn) itself clear, but stay within easy walking distance.
+      const d = Math.hypot(cx - sx, cy - sy);
+      if (d < 26) continue;
+      const cost = area(x0, y0) + d * 1.2;
+      if (cost < best.cost) best = { x: cx, y: cy, cost };
+    }
+  return best;
+}
+
+/**
+ * Fill the sea from coastline ways. The coastline is rasterised as a leak-proof barrier, the map is
+ * split into regions, and each region votes "sea" or "land" from samples just to the right (water)
+ * and left (land) of every coastline segment.
+ */
+function fillSea(b: MapBuilder, coasts: Pt[][]) {
+  if (!coasts.length) return;
+  const W = b.width;
+  const H = b.height;
+  const barrier = new Uint8Array(W * H);
+  const inside = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H;
+  const mark = (x: number, y: number) => {
+    if (inside(x, y)) barrier[y * W + x] = 1;
+  };
+  const segs: [number, number, number, number][] = [];
+  for (const l of coasts)
+    for (let i = 0; i + 1 < l.length; i++) {
+      const [x0, y0] = l[i]!;
+      const [x1, y1] = l[i + 1]!;
+      if (Math.max(x0, x1) < -2 || Math.min(x0, x1) > W + 2 || Math.max(y0, y1) < -2 || Math.min(y0, y1) > H + 2) continue;
+      segs.push([x0, y0, x1, y1]);
+      const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 3) + 1;
+      let px = Math.floor(x0);
+      let py = Math.floor(y0);
+      mark(px, py);
+      for (let s = 1; s <= steps; s++) {
+        const x = Math.floor(x0 + ((x1 - x0) * s) / steps);
+        const y = Math.floor(y0 + ((y1 - y0) * s) / steps);
+        if (x !== px && y !== py) mark(x, py); // no diagonal gaps for the flood fill to leak through
+        mark(x, y);
+        px = x;
+        py = y;
+      }
+    }
+
+  // Label 4-connected regions between barriers.
+  const region = new Int32Array(W * H).fill(-1);
+  const queue = new Int32Array(W * H);
+  let regions = 0;
+  for (let i = 0; i < W * H; i++) {
+    if (barrier[i] || region[i]! >= 0) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = i;
+    region[i] = regions;
+    while (head < tail) {
+      const c = queue[head++]!;
+      const cx = c % W;
+      const cy = (c - cx) / W;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (!inside(nx, ny)) continue;
+        const n = ny * W + nx;
+        if (barrier[n] || region[n]! >= 0) continue;
+        region[n] = regions;
+        queue[tail++] = n;
+      }
+    }
+    regions++;
+  }
+
+  // Vote. In screen space (y down) the water side of direction (dx, dy) is (-dy, dx).
+  const water = new Float64Array(regions);
+  const land = new Float64Array(regions);
+  const vote = (x: number, y: number, into: Float64Array, w: number) => {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    if (!inside(tx, ty) || barrier[ty * W + tx]) return;
+    into[region[ty * W + tx]!]! += w;
+  };
+  for (const [x0, y0, x1, y1] of segs) {
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    if (len < 0.5) continue;
+    const nx = -(y1 - y0) / len;
+    const ny = (x1 - x0) / len;
+    for (const t of [0.25, 0.5, 0.75])
+      for (const d of [1.5, 3]) {
+        const mx = x0 + (x1 - x0) * t;
+        const my = y0 + (y1 - y0) * t;
+        vote(mx + nx * d, my + ny * d, water, len);
+        vote(mx - nx * d, my - ny * d, land, len);
+      }
+  }
+
+  for (let i = 0; i < W * H; i++) {
+    const r = region[i]!;
+    if (r >= 0 && water[r]! > land[r]!) b.ground[i] = Tile.Water;
+  }
+  // The coastline itself becomes a strip of beach / rocks.
+  for (let i = 0; i < W * H; i++) if (barrier[i]) b.ground[i] = Tile.Sand;
 }
