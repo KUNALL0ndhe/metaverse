@@ -64,7 +64,7 @@ const server = createServer((req, res) => {
 
   if (url.pathname === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, rooms: rooms.size, spots: spots.length }));
+    res.end(JSON.stringify({ ok: true, rooms: rooms.size, spots: spots.length, keepAwake: !!KEEP_AWAKE_URL, uptime: Math.round(process.uptime()) }));
     return;
   }
   if (url.pathname === "/api/spaces") {
